@@ -11,6 +11,7 @@ import UploadResults from "./pages/UploadResults";
 import PublishResults from "./pages/PublishResults";
 import ParentResult from "./pages/ParentResult";
 import ClassResults from "./pages/ClassResults";
+import PublicClassResults from "./pages/PublicClassResults";
 import Analytics from "./pages/Analytics";
 
 const App = () => {
@@ -83,6 +84,7 @@ const App = () => {
             </ProtectedRoute>
           }
         />
+        <Route path="/public/class-results" element={<PublicClassResults />} />
         <Route
           path="/analytics"
           element={

@@ -7,12 +7,12 @@ const ParentResult = () => {
   const [results, setResults] = useState([]);
 
   const fetchResults = async () => {
-    const response = await api.get(`/results/student/${studentId}?exam_id=${examId}`);
+    const response = await api.get(`/results/student/${studentId}/?exam_id=${examId}`);
     setResults(response.data);
   };
 
   const downloadPdf = () => {
-    window.open(`${import.meta.env.VITE_API_URL || "http://localhost:8000/api"}/report-card/${studentId}/${examId}/pdf`, "_blank");
+    window.open(`${import.meta.env.VITE_API_URL || "http://localhost:8000/api"}/report-card/${studentId}/${examId}/pdf/`, "_blank");
   };
 
   return (

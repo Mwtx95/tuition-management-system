@@ -6,7 +6,7 @@ const Classes = () => {
   const [name, setName] = useState("");
 
   const fetchClasses = async () => {
-    const response = await api.get("/classes");
+    const response = await api.get("/classes/");
     setClasses(response.data.results || response.data);
   };
 
@@ -16,7 +16,7 @@ const Classes = () => {
 
   const handleSubmit = async (event) => {
     event.preventDefault();
-    await api.post("/classes", { name });
+    await api.post("/classes/", { name });
     setName("");
     fetchClasses();
   };

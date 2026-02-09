@@ -1,10 +1,12 @@
 from rest_framework.permissions import BasePermission
-from .models import RolePermission, UserRole
+from .models import Permission, RolePermission, UserRole
 
 
 def get_user_permission_codes(user):
     if not user or not user.is_authenticated:
         return set()
+    if user.is_superuser:
+        return set(Permission.objects.values_list("code", flat=True))
     role_ids = UserRole.objects.filter(user=user).values_list("role_id", flat=True)
     permission_codes = RolePermission.objects.filter(role_id__in=role_ids).values_list(
         "permission__code", flat=True

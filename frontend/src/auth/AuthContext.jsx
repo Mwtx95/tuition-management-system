@@ -9,7 +9,7 @@ export const AuthProvider = ({ children }) => {
 
   const fetchMe = useCallback(async () => {
     try {
-      const response = await api.get("/auth/me");
+      const response = await api.get("/auth/me/");
       setUser(response.data);
     } catch (error) {
       setUser(null);
@@ -19,7 +19,7 @@ export const AuthProvider = ({ children }) => {
   }, []);
 
   const login = async (username, password) => {
-    const response = await api.post("/auth/login", { username, password });
+    const response = await api.post("/auth/login/", { username, password });
     localStorage.setItem("access_token", response.data.access);
     localStorage.setItem("refresh_token", response.data.refresh);
     await fetchMe();

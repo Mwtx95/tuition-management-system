@@ -102,3 +102,4 @@ SIMPLE_JWT = {
 CORS_ALLOW_ALL_ORIGINS = True
 
 TUITION_NAME = os.getenv("TUITION_NAME", "Bright Future Tuition Center")
+REG_NO_PREFIX = os.getenv("REG_NO_PREFIX", "BTC")

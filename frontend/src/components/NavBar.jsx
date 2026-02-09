@@ -7,9 +7,14 @@ const NavBar = () => {
   return (
     <nav className="bg-white shadow-sm">
       <div className="mx-auto max-w-6xl px-4 py-4 flex items-center justify-between">
-        <Link to="/" className="font-semibold text-indigo-600">
-          Tuition Management
-        </Link>
+        <div className="flex items-center gap-4">
+          <Link to="/" className="font-semibold text-indigo-600">
+            Tuition Management
+          </Link>
+          <Link to="/public/class-results" className="text-sm text-gray-600">
+            Public Results
+          </Link>
+        </div>
         {user ? (
           <div className="flex items-center gap-4">
             <span className="text-sm text-gray-600">{user.username}</span>

@@ -4,6 +4,7 @@ from .models import (
     Exam,
     Permission,
     Result,
+    ResultPublication,
     Role,
     RolePermission,
     Student,
@@ -20,3 +21,4 @@ admin.site.register(Student)
 admin.site.register(Subject)
 admin.site.register(Exam)
 admin.site.register(Result)
+admin.site.register(ResultPublication)

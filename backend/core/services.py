@@ -3,7 +3,7 @@ from decimal import Decimal, ROUND_HALF_UP
 
 from django.db.models import Avg, Sum
 
-from .models import Result, Student, Subject
+from .models import Result, ResultPublication, Student, Subject
 
 
 def grade_for_marks(marks):
@@ -39,7 +39,7 @@ def build_subject_headers(subjects):
     headers = []
     used = set()
     for subject in subjects:
-        base = (subject.code or subject.name or "").strip() or f"Subject {subject.id}"
+        base = (subject.name or subject.code or "").strip() or f"Subject {subject.id}"
         header = base
         if header in used:
             header = f"{base} ({subject.id})"
@@ -48,7 +48,13 @@ def build_subject_headers(subjects):
     return headers
 
 
-def build_class_result_sheet(class_room, exam, include_marks=True):
+def build_class_result_sheet(
+    class_room,
+    exam,
+    include_marks=True,
+    include_grades=True,
+    include_totals=True,
+):
     subjects = list(Subject.objects.filter(class_room=class_room).order_by("name"))
     subject_headers = build_subject_headers(subjects)
     subject_meta = [
@@ -77,20 +83,21 @@ def build_class_result_sheet(class_room, exam, include_marks=True):
                 {
                     "subject_id": subject.id,
                     "marks": _format_decimal(marks) if include_marks and marks is not None else "",
-                    "grade": grade if include_marks and grade is not None else "",
+                    "grade": grade if include_grades and grade is not None else "",
                 }
             )
         average = (total / count) if count else None
-        average_grade = grade_for_marks(average) if include_marks and average is not None else ""
+        average_grade = grade_for_marks(average) if include_grades and average is not None else ""
         remarks = remarks_for_grade(average_grade) if average_grade else ""
         rows.append(
             {
                 "student_id": student.id,
+                "reg_no": student.reg_no or "",
                 "full_name": f"{student.first_name} {student.last_name}",
                 "gender": student.gender,
                 "subjects": subject_rows,
-                "total": _format_decimal(total) if include_marks and count else "",
-                "average": _format_decimal(average) if include_marks and average is not None else "",
+                "total": _format_decimal(total) if include_totals and count else "",
+                "average": _format_decimal(average) if include_totals and average is not None else "",
                 "average_grade": average_grade,
                 "remarks": remarks,
                 "rank": rankings.get(student.id, ""),
@@ -123,6 +130,12 @@ def calculate_rankings(results):
             current_rank = index + 1
         ranks[student_id] = current_rank
     return ranks
+
+
+def is_result_published(student, exam):
+    if exam.is_published:
+        return True
+    return ResultPublication.objects.filter(student=student, exam=exam).exists()
 
 
 def analytics_for_class(class_room, exam):

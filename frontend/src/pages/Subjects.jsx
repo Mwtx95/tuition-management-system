@@ -6,7 +6,7 @@ const Subjects = () => {
   const [form, setForm] = useState({ name: "", code: "", class_room: "" });
 
   const fetchSubjects = async () => {
-    const response = await api.get("/subjects");
+    const response = await api.get("/subjects/");
     setSubjects(response.data.results || response.data);
   };
 
@@ -20,7 +20,7 @@ const Subjects = () => {
 
   const handleSubmit = async (event) => {
     event.preventDefault();
-    await api.post("/subjects", form);
+    await api.post("/subjects/", form);
     setForm({ name: "", code: "", class_room: "" });
     fetchSubjects();
   };

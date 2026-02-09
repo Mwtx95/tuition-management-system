@@ -12,7 +12,7 @@ from .models import (
     Subject,
     UserRole,
 )
-from .services import grade_for_marks
+from .services import grade_for_marks, is_result_published
 from .permissions import get_user_permission_codes
 
 User = get_user_model()
@@ -64,17 +64,46 @@ class ClassRoomSerializer(serializers.ModelSerializer):
 
 
 class StudentSerializer(serializers.ModelSerializer):
+    full_name = serializers.CharField(write_only=True, required=False)
+    display_name = serializers.SerializerMethodField(read_only=True)
+
     class Meta:
         model = Student
         fields = [
             "id",
+            "reg_no",
             "first_name",
             "last_name",
+            "full_name",
+            "display_name",
             "gender",
+            "age",
             "date_of_birth",
             "class_room",
             "parent",
+            "address",
         ]
+        read_only_fields = ["reg_no"]
+        extra_kwargs = {
+            "first_name": {"required": False},
+            "last_name": {"required": False},
+        }
+
+    def get_display_name(self, obj):
+        return f"{obj.first_name} {obj.last_name}".strip()
+
+    def validate(self, attrs):
+        full_name = attrs.pop("full_name", None)
+        if full_name and not attrs.get("first_name") and not attrs.get("last_name"):
+            parts = [part for part in full_name.strip().split(" ") if part]
+            if parts:
+                attrs["first_name"] = parts[0]
+                attrs["last_name"] = " ".join(parts[1:]) if len(parts) > 1 else ""
+        if not attrs.get("first_name"):
+            if self.instance and getattr(self, "partial", False):
+                return attrs
+            raise serializers.ValidationError("first_name is required.")
+        return attrs
 
 
 class SubjectSerializer(serializers.ModelSerializer):
@@ -121,7 +150,8 @@ class ResultSerializer(serializers.ModelSerializer):
 
     def validate(self, attrs):
         exam = attrs.get("exam")
-        if exam and exam.is_published:
+        student = attrs.get("student")
+        if exam and student and is_result_published(student, exam):
             raise serializers.ValidationError("Cannot edit results after exam is published.")
         return attrs
 
@@ -131,7 +161,7 @@ class ResultSerializer(serializers.ModelSerializer):
         return super().create(validated_data)
 
     def update(self, instance, validated_data):
-        if instance.exam.is_published:
+        if is_result_published(instance.student, instance.exam):
             raise serializers.ValidationError("Cannot edit results after exam is published.")
         if "marks" in validated_data:
             validated_data["grade"] = grade_for_marks(validated_data["marks"])

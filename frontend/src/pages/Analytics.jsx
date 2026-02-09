@@ -7,7 +7,7 @@ const Analytics = () => {
   const [data, setData] = useState(null);
 
   const fetchAnalytics = async () => {
-    const response = await api.get(`/analytics/class/${classId}?exam_id=${examId}`);
+    const response = await api.get(`/analytics/class/${classId}/?exam_id=${examId}`);
     setData(response.data);
   };
 
