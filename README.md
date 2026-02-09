@@ -13,7 +13,7 @@ Production-ready starter for a small tuition center to upload results, publish e
 ## Quick Start (Docker)
 
 ```bash
-docker-compose up --build
+docker compose up --build
 ```
 
 ### Initial setup
@@ -21,11 +21,11 @@ docker-compose up --build
 ```bash
 # run migrations and create admin
 
-docker-compose exec backend python manage.py migrate
+docker compose exec backend python manage.py migrate
 
-docker-compose exec backend python manage.py createsuperuser
+docker compose exec backend python manage.py createsuperuser
 
-docker-compose exec backend python manage.py seed_roles
+docker compose exec backend python manage.py seed_roles
 ```
 
 ## Environment
