@@ -100,6 +100,7 @@ class ExamSerializer(serializers.ModelSerializer):
 
 
 class ResultSerializer(serializers.ModelSerializer):
+    grade = serializers.SerializerMethodField()
     class Meta:
         model = Result
         fields = [
@@ -114,6 +115,9 @@ class ResultSerializer(serializers.ModelSerializer):
             "updated_at",
         ]
         read_only_fields = ["grade", "uploaded_by", "created_at", "updated_at"]
+
+    def get_grade(self, obj):
+        return grade_for_marks(obj.marks)
 
     def validate(self, attrs):
         exam = attrs.get("exam")

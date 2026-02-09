@@ -1,9 +1,12 @@
+import csv
 from decimal import Decimal
-from io import BytesIO
+from io import BytesIO, StringIO
 
 from django.conf import settings
+from django.db import transaction
 from django.db.models import Avg, Sum
-from django.http import FileResponse
+from django.http import FileResponse, HttpResponse
+from django.shortcuts import get_object_or_404
 from reportlab.lib.pagesizes import letter
 from reportlab.pdfgen import canvas
 from rest_framework import status, viewsets
@@ -21,7 +24,13 @@ from .serializers import (
     SubjectSerializer,
     UserSerializer,
 )
-from .services import analytics_for_class, calculate_rankings, grade_for_marks
+from .services import (
+    analytics_for_class,
+    build_class_result_sheet,
+    build_subject_headers,
+    calculate_rankings,
+    grade_for_marks,
+)
 
 
 class CurrentUserView(APIView):
@@ -126,6 +135,158 @@ class ClassResultView(APIView):
         return Response({"results": ResultSerializer(results, many=True).data, "totals": list(totals), "rankings": rankings})
 
 
+class ClassResultSheetView(APIView):
+    permission_classes = [HasPermission]
+    required_permission = "view_class_result"
+
+    def get(self, request, class_id):
+        exam_id = request.query_params.get("exam_id")
+        if not exam_id:
+            return Response({"detail": "exam_id is required"}, status=status.HTTP_400_BAD_REQUEST)
+        class_room = get_object_or_404(ClassRoom, id=class_id)
+        exam = get_object_or_404(Exam, id=exam_id, class_room=class_room)
+        sheet = build_class_result_sheet(class_room, exam, include_marks=True)
+        return Response(sheet)
+
+
+class ClassResultCsvTemplateView(APIView):
+    permission_classes = [HasPermission]
+    required_permission = "view_class_result"
+
+    def get(self, request, class_id):
+        exam_id = request.query_params.get("exam_id")
+        if not exam_id:
+            return Response({"detail": "exam_id is required"}, status=status.HTTP_400_BAD_REQUEST)
+        class_room = get_object_or_404(ClassRoom, id=class_id)
+        exam = get_object_or_404(Exam, id=exam_id, class_room=class_room)
+
+        sheet = build_class_result_sheet(class_room, exam, include_marks=False)
+        output = StringIO()
+        writer = csv.writer(output)
+        headers = ["Student ID", "Full Name", "Gender"]
+        for subject in sheet["subjects"]:
+            headers.append(subject["header"])
+            headers.append(f"{subject['header']} Grade")
+        headers += ["Total", "Avg", "Avg Grade", "Remarks"]
+        writer.writerow(headers)
+        for row in sheet["rows"]:
+            row_data = [row["student_id"], row["full_name"], row["gender"]]
+            for _ in sheet["subjects"]:
+                row_data += ["", ""]
+            row_data += ["", "", "", ""]
+            writer.writerow(row_data)
+
+        filename = f"class_{class_id}_exam_{exam_id}_results_template.csv"
+        response = HttpResponse(output.getvalue(), content_type="text/csv")
+        response["Content-Disposition"] = f'attachment; filename="{filename}"'
+        return response
+
+
+class ClassResultCsvImportView(APIView):
+    permission_classes = [HasPermission]
+    required_permission = "upload_result"
+
+    def post(self, request, class_id):
+        exam_id = request.query_params.get("exam_id") or request.data.get("exam_id")
+        if not exam_id:
+            return Response({"detail": "exam_id is required"}, status=status.HTTP_400_BAD_REQUEST)
+        upload = request.FILES.get("file")
+        if not upload:
+            return Response({"detail": "CSV file is required."}, status=status.HTTP_400_BAD_REQUEST)
+
+        class_room = get_object_or_404(ClassRoom, id=class_id)
+        exam = get_object_or_404(Exam, id=exam_id, class_room=class_room)
+        if exam.is_published:
+            return Response(
+                {"detail": "Cannot edit results after exam is published."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        subjects = list(Subject.objects.filter(class_room=class_room).order_by("name"))
+        subject_headers = build_subject_headers(subjects)
+        subject_by_header = dict(zip(subject_headers, subjects))
+
+        content = upload.read().decode("utf-8-sig")
+        reader = csv.DictReader(StringIO(content))
+        if not reader.fieldnames:
+            return Response({"detail": "CSV header row is required."}, status=status.HTTP_400_BAD_REQUEST)
+
+        student_id_header = None
+        for candidate in ("Student ID", "student_id", "student id", "ID"):
+            if candidate in reader.fieldnames:
+                student_id_header = candidate
+                break
+        if not student_id_header:
+            return Response(
+                {"detail": "Missing 'Student ID' column in CSV."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        missing_subject_headers = [
+            header for header in subject_headers if header not in reader.fieldnames
+        ]
+        if missing_subject_headers:
+            return Response(
+                {"detail": "Missing subject columns in CSV.", "missing": missing_subject_headers},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        errors = []
+        operations = []
+        for index, row in enumerate(reader, start=2):
+            raw_student_id = (row.get(student_id_header) or "").strip()
+            if not raw_student_id:
+                errors.append({"row": index, "error": "Student ID is required."})
+                continue
+            try:
+                student_id = int(raw_student_id)
+            except ValueError:
+                errors.append({"row": index, "error": f"Invalid Student ID '{raw_student_id}'."})
+                continue
+            student = Student.objects.filter(id=student_id, class_room=class_room).first()
+            if not student:
+                errors.append({"row": index, "error": f"Student ID {student_id} not found in class."})
+                continue
+
+            for header, subject in subject_by_header.items():
+                raw_marks = (row.get(header) or "").strip()
+                if raw_marks == "":
+                    continue
+                try:
+                    marks = Decimal(raw_marks)
+                except Exception:
+                    errors.append({"row": index, "error": f"Invalid marks '{raw_marks}' for {header}."})
+                    continue
+                if marks < 0 or marks > 100:
+                    errors.append({"row": index, "error": f"Marks out of range for {header}."})
+                    continue
+                operations.append((student, subject, marks))
+
+        if errors:
+            return Response({"detail": "Validation errors in CSV.", "errors": errors}, status=status.HTTP_400_BAD_REQUEST)
+
+        created = 0
+        updated = 0
+        with transaction.atomic():
+            for student, subject, marks in operations:
+                result, was_created = Result.objects.update_or_create(
+                    student=student,
+                    subject=subject,
+                    exam=exam,
+                    defaults={
+                        "marks": marks,
+                        "grade": grade_for_marks(marks),
+                        "uploaded_by": request.user,
+                    },
+                )
+                if was_created:
+                    created += 1
+                else:
+                    updated += 1
+
+        return Response({"created": created, "updated": updated, "total": created + updated})
+
+
 class PublishExamView(APIView):
     permission_classes = [HasPermission]
     required_permission = "publish_result"
@@ -168,7 +329,7 @@ class ReportCardPdfView(APIView):
         for result in results:
             pdf.drawString(40, y, result.subject.name)
             pdf.drawString(250, y, str(result.marks))
-            pdf.drawString(320, y, result.grade)
+            pdf.drawString(320, y, grade_for_marks(result.marks))
             y -= 20
             if y < 120:
                 pdf.showPage()

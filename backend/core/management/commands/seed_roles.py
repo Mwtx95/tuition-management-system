@@ -35,7 +35,7 @@ class Command(BaseCommand):
                 "manage_users",
                 "view_analytics",
             ],
-            "Teacher": ["upload_result", "view_student_result", "view_class_result"],
+            "Teacher": ["upload_result", "view_student_result", "view_class_result", "crud_class", "crud_subject", "publish_result"],
             "Exam Officer": [
                 "publish_result",
                 "view_student_result",
