@@ -111,30 +111,46 @@ class ResultBulkUploadView(APIView):
         serializer = BulkResultUploadSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         created = []
+        created_count = 0
+        updated_count = 0
         for item in serializer.validated_data["results"]:
             exam = Exam.objects.get(id=item["exam"])
             student = Student.objects.get(id=item["student"])
             subject = Subject.objects.get(id=item["subject"])
-            if is_result_published(student, exam):
-                return Response(
-                    {"detail": "Cannot edit results after exam is published."},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
             if student.class_room_id != exam.class_room_id or subject.class_room_id != exam.class_room_id:
                 return Response(
                     {"detail": "Student, subject, and exam must belong to the same class."},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
-            result = Result.objects.create(
+            if is_result_published(student, exam):
+                return Response(
+                    {"detail": "Cannot edit results after exam is published."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            result, was_created = Result.objects.update_or_create(
                 student=student,
                 subject=subject,
-                exam_id=item["exam"],
-                marks=item["marks"],
-                grade=grade_for_marks(item["marks"]),
-                uploaded_by=request.user,
+                exam=exam,
+                defaults={
+                    "marks": item["marks"],
+                    "grade": grade_for_marks(item["marks"]),
+                    "uploaded_by": request.user,
+                },
             )
+            if was_created:
+                created_count += 1
+            else:
+                updated_count += 1
             created.append(ResultSerializer(result).data)
-        return Response({"results": created}, status=status.HTTP_201_CREATED)
+        return Response(
+            {
+                "results": created,
+                "created": created_count,
+                "updated": updated_count,
+                "total": created_count + updated_count,
+            },
+            status=status.HTTP_201_CREATED,
+        )
 
 
 class StudentResultView(APIView):
